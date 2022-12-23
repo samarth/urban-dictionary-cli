@@ -1,21 +1,31 @@
 package main
 
 import (
-	"github.com/urfave/cli"
-	"fmt"
-	"os"
-	"net/http"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
+	"net/http"
+	"os"
+	"sort"
+
+	"github.com/urfave/cli"
 )
 
 const udapi = "http://api.urbandictionary.com/v0/define?term=%s"
+
+type udrSorterThumbsUp []udresponselist
+
+func (a udrSorterThumbsUp) Len() int      { return len(a) }
+func (a udrSorterThumbsUp) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
+func (a udrSorterThumbsUp) Less(i, j int) bool {
+	return a[i].Thumbs_up-a[i].Thumbs_down > a[j].Thumbs_up-a[j].Thumbs_down
+}
 
 type udresponse struct {
 	Tags        []string
 	Result_type string `json:"result_type"`
 	List        []udresponselist
-	Sounds       []string
+	Sounds      []string
 }
 
 type udresponselist struct {
@@ -32,6 +42,7 @@ type udresponselist struct {
 
 func main() {
 	var term string
+	var high bool
 	app := cli.NewApp()
 	app.Name = "udcli"
 	app.Usage = "udcli <term> "
@@ -43,15 +54,20 @@ func main() {
 			Usage:       "Term you want to query on Urban Dictionary",
 			Destination: &term,
 		},
+		cli.BoolFlag{
+			Name:        "highest, i",
+			Usage:       "If set sort by highsted voted answer \"highest voted\"",
+			Destination: &high,
+		},
 	}
 	app.Action = func(c *cli.Context) error {
-		queryUD(term)
+		queryUD(term, high)
 		return nil
 	}
 	app.Run(os.Args)
 }
 
-func queryUD(term string) {
+func queryUD(term string, high bool) {
 	queryuri := fmt.Sprintf(udapi, term)
 	resp, err := http.Get(queryuri)
 	if err != nil || resp.StatusCode != http.StatusOK {
@@ -75,6 +91,10 @@ func queryUD(term string) {
 		fmt.Println()
 		os.Exit(0)
 	}
+	if high {
+		sort.Sort(udrSorterThumbsUp(udr.List))
+	}
+
 	var topdef = udr.List[0]
 
 	fmt.Println()
